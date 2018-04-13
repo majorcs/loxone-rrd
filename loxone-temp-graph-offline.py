@@ -65,7 +65,7 @@ for rrd in data:
         print(u"Unknown data key: {}".format(rrd))
         continue
 
-    fname = u'data/{}.rrd'.format(rrd).encode('utf-8')
+    fname = u'{}.rrd'.format(rrd).encode('utf-8')
     p = get_params(config['Data'][rrd])
     rrdtool.create([fname] + p)
     for v in data[rrd]:
@@ -75,7 +75,7 @@ for graph in config['Graphs']:
     if re.match('__', graph):
         continue
 
-    fname = u'data/{}.png'.format(graph).encode('utf-8')
+    fname = u'{}.png'.format(graph).encode('utf-8')
     print(fname)
     p = [fname] + get_params(config['Graphs'][graph])
     print(p)

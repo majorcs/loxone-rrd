@@ -3,11 +3,14 @@
 
 import codecs
 import datetime
+import getopt
 import os
 import re
 import rrdtool
+import signal
 import sys
 import syslog
+import threading
 import time
 import yaml
 
@@ -17,11 +20,31 @@ sys.setdefaultencoding('utf8')
 codecs.getreader('utf-8')(sys.stdin)
 data = {}
 RULE_ORDER=['DEF', 'VDEF', 'CDEF']
+EOF=False
 syslog.openlog('loxone-rrd', syslog.LOG_PID | syslog.LOG_USER )
 
-def log(msg):
-    syslog.syslog(unicode(msg).encode('utf-8'))
 
+def log(msg):
+    if sys.stdout.isatty():
+        print(unicode(msg).encode('utf-8'))
+    else:
+        syslog.syslog(unicode(msg).encode('utf-8'))
+
+
+def generate_graph(interval, config):
+    while not EOF:
+        for i in xrange(interval):
+            if EOF:
+                break
+            time.sleep(1)
+
+        log("Generating graphs {}".format(EOF))
+        rrd_graph(config)
+        log("Graph generation done")
+
+    log("Exiting from graph thread")
+
+    
 def get_params(config):
     ret = []
     if config.has_key('parameters'):
@@ -47,30 +70,62 @@ def get_params(config):
     
     return(ret)
 
-def generate_graph(config):
+
+def rrd_graph(config):
+    graphdir = config.get('Parameters', {}).get('graphdir', '/var/www/loxone-rrd')
     for graph in config['Graphs']:
         if re.match('__', graph):
             continue
 
-        fname = u'{}.png'.format(graph).encode('utf-8')
+        fname = u'{}/{}.png'.format(graphdir, graph).encode('utf-8')
         p = [fname] + get_params(config['Graphs'][graph])
-        rrdtool.graph(p)
+        p += ['COMMENT:\\n', 'COMMENT:Last update\\: {}\\r'.format(time.strftime('%Y-%m-%d %H\\:%M\\:%S'))]
+        print(p)
+        log("Generating: {}".format(fname))
+        try:
+            rrdtool.graph(p)
+        except Exception as e:
+            log("Error: {}".format(e))
     
 
 pattern = re.compile('(\d+-\d+-\d+ \d+:\d+:\d+);(.*?);([\d.]+)', flags=re.LOCALE)
-config = yaml.load(open('graph.conf'))
-
 log(u'Starting up')
+
+opts, args = getopt.getopt(sys.argv[1:], 'c:', ['config='])
+config = '/etc/loxone-rrd.conf'
+
+for o, a in opts:
+    if o in ('-c', '--config'):
+        config = a
+
+log('Opening config: {}'.format(config))
+try:
+    config = yaml.load(open(config))
+except Exception as e:
+    log("Error opening config: {}".format(e))
+    time.sleep(1)
+    exit(1)
+
 if config.get('Parameters').has_key('workdir'):
     d = config['Parameters']['workdir']
     log("Changing working dir to: {}".format(d))
     os.chdir(d)
-    
 
-EOF=False
+graph_interval = int(config.get('Parameters', {}).get('graph_interval', 120))
+log("Setting up graph generation interval: {}".format(graph_interval))
+t = threading.Thread(target=generate_graph, kwargs={'interval': graph_interval, 'config': config})
+t.start()
+
 while not EOF:
-    line = sys.stdin.readline()
+    try:
+        line = sys.stdin.readline()
+    except (BaseException, Exception) as e:
+        log("Error during read: {}".format(e))
+        EOF = True
+        break
+
     if line == '':
+        EOF = True
         break
     line = line.strip()
     r = pattern.search(line)
@@ -100,3 +155,4 @@ while not EOF:
         log("Error updating RRD: {}".format(e))
 
 log("Exiting")
+t.join()
