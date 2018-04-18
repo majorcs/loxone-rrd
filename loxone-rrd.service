@@ -1,0 +1,10 @@
+[Unit]
+Description=uWSGI instance to serve loxone-rrd
+
+[Service]
+Environment=PYTHONPATH=/usr/lib/loxone-rrd
+ExecStartPre=-/usr/bin/bash -c 'mkdir -p /run/uwsgi; chown nobody:http /run/uwsgi'
+ExecStart=/usr/bin/bash -c 'cd /var/lib/loxone-rrd; uwsgi --ini /etc/loxone-rrd.uwsgi.ini'
+
+[Install]
+WantedBy=multi-user.target
