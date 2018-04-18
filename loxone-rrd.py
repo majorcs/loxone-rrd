@@ -19,12 +19,9 @@ import yaml
 reload(sys)  
 sys.setdefaultencoding('utf8')
 
-codecs.getreader('utf-8')(sys.stdin)
-data = {}
-RULE_ORDER=['DEF', 'VDEF', 'CDEF']
-EOF=False
 syslog.openlog('loxone-rrd', syslog.LOG_PID | syslog.LOG_USER )
 pattern = re.compile('(\d+-\d+-\d+ \d+:\d+:\d+);(.*?);([\d.]+)', flags=re.LOCALE)
+EOF = False
 
 def log(msg):
     if sys.stdout.isatty():
@@ -34,6 +31,7 @@ def log(msg):
 
 
 def generate_graph(interval, config):
+    global EOF
     while not EOF:
         for i in xrange(interval):
             if EOF:
@@ -169,6 +167,11 @@ def load_config(config_filename):
 ### MAIN app
 ###
 def main():
+    codecs.getreader('utf-8')(sys.stdin)
+    data = {}
+    RULE_ORDER=['DEF', 'VDEF', 'CDEF']
+    EOF=False
+
     config_filename = '/etc/loxone-rrd.conf'
     log(u'Starting up')
     opts, args = getopt.getopt(sys.argv[1:], 'c:', ['config='])
